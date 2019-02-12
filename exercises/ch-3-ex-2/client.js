@@ -133,6 +133,15 @@ app.get('/fetch_resource', function(req, res) {
 		res.render('data', {resource: body});
 		return;
 	} else {
+		access_token = null;
+		if (refresh_token) {
+			refreshAccessToken(req, res);
+			return;
+		} else {
+			res.render('error', {
+				'error': resource.statusCode,
+			});
+		}
 		/*
 		 * Instead of always returning an error like we do here, refresh the access token if we have a refresh token
 		 */
@@ -144,7 +153,37 @@ app.get('/fetch_resource', function(req, res) {
 });
 
 var refreshAccessToken = function(req, res) {
+	var form_data = qs.stringify({
+		grant_type: 'refresh_token',
+		refresh_token: refresh_token,
+	});
+	var headers = {
+		'Content-Type': 'application/x-www-form-urlencoded',
+		'Authorization': `Basic ${encodeClientCredentials(client.client_id, client.client_secret)}`
+	};
+	var tokRes = request('POST', authServer.tokenEndpoint, {
+		body: form_data,
+		headers: headers,
+	});
 
+	if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
+		var body = JSON.parse(tokRes.getBody());
+		access_token = body.access_token;
+
+		if (body.refresh_token) {
+			refresh_token = body.refresh_token;
+		}
+
+		scope = body.scope;
+		res.redirect('/fetch_resource');
+		return;
+	} else {
+		refresh_token = null;
+		res.render('error', {
+			error: 'Unable to refresh token.',
+		});
+		return;	
+	}
 	/*
 	 * Use the refresh token to get a new access token
 	 */
